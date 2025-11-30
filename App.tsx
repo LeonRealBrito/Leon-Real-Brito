@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import Header from './components/Header';
-import { UploadCloud, FileAudio, AlertCircle } from 'lucide-react';
+import { UploadCloud, FileAudio, AlertCircle, Clock, CheckCircle } from 'lucide-react';
 import { AppStatus, ProcessingState, DubResult, VoiceOption } from './types';
 import { transcribeAndTranslate, generateSpanishAudio } from './services/geminiService';
 import { ProcessingStep } from './components/ProcessingStep';
@@ -15,6 +15,7 @@ const App: React.FC = () => {
   });
   const [result, setResult] = useState<DubResult | null>(null);
   const [selectedVoice, setSelectedVoice] = useState<VoiceOption>(VoiceOption.PUCK);
+  const [syncMode, setSyncMode] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -52,8 +53,8 @@ const App: React.FC = () => {
       setState({ status: AppStatus.UPLOADING, message: 'Preparando archivo...', progress: 10 });
       
       // 2. Transcribe & Translate
-      setState({ status: AppStatus.TRANSCRIBING, message: 'Escuchando y traduciendo...', progress: 30 });
-      const translationResult = await transcribeAndTranslate(file);
+      setState({ status: AppStatus.TRANSCRIBING, message: syncMode ? 'Analizando tiempos y traduciendo...' : 'Escuchando y traduciendo...', progress: 30 });
+      const translationResult = await transcribeAndTranslate(file, syncMode);
       
       // 3. Generate Audio
       setState({ status: AppStatus.GENERATING_AUDIO, message: 'Generando voz en español...', progress: 70 });
@@ -148,13 +149,14 @@ const App: React.FC = () => {
             {/* Controls */}
             {file && state.status === AppStatus.IDLE && (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Voice Selector */}
                   <div className="space-y-2">
                      <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Voz del narrador</label>
                      <select 
                       value={selectedVoice}
                       onChange={(e) => setSelectedVoice(e.target.value as VoiceOption)}
-                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-indigo-500 outline-none appearance-none"
                      >
                        <option value={VoiceOption.PUCK}>Puck (Masculino, Suave)</option>
                        <option value={VoiceOption.KORE}>Kore (Femenino, Calmado)</option>
@@ -162,19 +164,38 @@ const App: React.FC = () => {
                        <option value={VoiceOption.ZEPHYR}>Zephyr (Femenino, Enérgico)</option>
                      </select>
                   </div>
-                  <div className="space-y-2">
-                     <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Idioma de destino</label>
-                     <div className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-slate-400 cursor-not-allowed">
-                       Español (Automático)
-                     </div>
+
+                  {/* Sync Toggle */}
+                  <div 
+                    onClick={() => setSyncMode(!syncMode)}
+                    className={`
+                      relative cursor-pointer rounded-lg border px-4 py-2 flex items-center justify-between transition-all duration-200
+                      ${syncMode 
+                        ? 'bg-indigo-500/10 border-indigo-500/50 hover:bg-indigo-500/20' 
+                        : 'bg-slate-800 border-slate-700 hover:border-slate-600'}
+                    `}
+                  >
+                    <div className="flex flex-col">
+                      <span className={`text-sm font-semibold ${syncMode ? 'text-indigo-300' : 'text-slate-300'}`}>
+                        Sincronización Labial (Beta)
+                      </span>
+                      <span className="text-xs text-slate-500">Mantener pausas originales</span>
+                    </div>
+                    <div className={`
+                      w-5 h-5 rounded-full flex items-center justify-center border transition-all
+                      ${syncMode ? 'bg-indigo-500 border-indigo-500' : 'border-slate-500'}
+                    `}>
+                      {syncMode && <CheckCircle className="w-3 h-3 text-white" />}
+                    </div>
                   </div>
                 </div>
 
                 <button 
                   onClick={handleProcess}
-                  className="w-full py-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl font-semibold text-lg shadow-lg shadow-indigo-600/20 transition-all transform hover:scale-[1.02] active:scale-[0.98]"
+                  className="w-full py-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl font-semibold text-lg shadow-lg shadow-indigo-600/20 transition-all transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2"
                 >
-                  Comenzar Doblaje
+                  {syncMode && <Clock className="w-5 h-5" />}
+                  {syncMode ? 'Generar Doblaje Sincronizado' : 'Comenzar Doblaje'}
                 </button>
               </div>
             )}
@@ -190,7 +211,7 @@ const App: React.FC = () => {
                     isError={state.status === AppStatus.ERROR}
                   />
                   <ProcessingStep 
-                    label="Transcribiendo y Traduciendo" 
+                    label={syncMode ? "Adaptando Tiempos y Traduciendo" : "Transcribiendo y Traduciendo"}
                     isCompleted={state.status === AppStatus.GENERATING_AUDIO}
                     isActive={state.status === AppStatus.TRANSCRIBING}
                     isError={state.status === AppStatus.ERROR}

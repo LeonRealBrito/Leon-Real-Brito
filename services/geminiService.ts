@@ -13,16 +13,27 @@ interface TranslationResult {
 /**
  * Step 1: Transcribe and Translate the audio file.
  * We use Gemini 2.5 Flash for its large context window and multimodal capabilities.
+ * @param file The audio file to process
+ * @param syncMode If true, instructs the model to preserve original timing/pauses for video dubbing
  */
-export const transcribeAndTranslate = async (file: File): Promise<TranslationResult> => {
+export const transcribeAndTranslate = async (file: File, syncMode: boolean = false): Promise<TranslationResult> => {
   const base64Audio = await fileToBase64(file);
   const mimeType = file.type || 'audio/mp3'; // Fallback if type is missing
 
   // Prompt engineering for specific JSON output to get both original and translated text
+  // If syncMode is enabled, we ask for dubbing-specific constraints (isochrony and pauses).
+  const dubbingInstruction = syncMode 
+    ? `CRITICAL INSTRUCTION FOR VIDEO DUBBING:
+       The Spanish translation MUST match the exact rhythm, timing, and pauses of the original speaker. 
+       - If the speaker pauses, insert ellipses (...) or commas to force the TTS to pause.
+       - Match the length of the sentences to the original audio duration (isochrony).
+       - This text will be used to replace the original audio in a video editor.` 
+    : `Translate the transcription into natural, fluent Spanish.`;
+
   const prompt = `
     Analyze the audio file provided. 
     1. Transcribe the audio verbatim in its original language.
-    2. Translate the transcription into natural, fluent Spanish.
+    2. ${dubbingInstruction}
     
     Return the result in JSON format.
   `;
